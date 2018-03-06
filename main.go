@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"html/template"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"kirides.com/sseTest/ssebroker"
@@ -14,12 +14,14 @@ import (
 func main() {
 	ctxt := context.Background()
 	sseBroker := ssebroker.NewSseBroker()
-	http.Handle("/sse-stream", sseBroker.HandleAndListenWithContext(ctxt))
+	http.Handle("/sse-stream", sseBroker.HandleWithContextAndGzip(ctxt))
+	go sseBroker.ListenWithContext(ctxt)
 	http.HandleFunc("/", indexHandler)
 	go func() {
 		for {
 			time.Sleep(1 * time.Second)
-			data := fmt.Sprintf("Current Time: %s", time.Now().Format("2006-01-02T15:04:05.999-07:00"))
+			// data := fmt.Sprintf("Current Time: %s", time.Now().Format("2006-01-02T15:04:05.999-07:00"))
+			data := strings.Repeat("A", 600)
 			sseBroker.SendEvent("1", "currentTime", []byte(data))
 		}
 	}()

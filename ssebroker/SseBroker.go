@@ -1,8 +1,10 @@
 package ssebroker
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 )
@@ -44,8 +46,6 @@ func (b *SseBroker) ListenWithContext(ctx context.Context) {
 				client <- c
 			}
 			break
-		default:
-			break
 		}
 	}
 }
@@ -80,10 +80,26 @@ func (b *SseBroker) Handle() http.Handler {
 
 // HandleWithContext Handles request to a listening Broker
 func (b *SseBroker) HandleWithContext(ctx context.Context) http.Handler {
+	return b.handleWithContextAndCompression(ctx, "", nil)
+}
+
+// HandleWithContextAndGzip Handles request to a listening Broker
+func (b *SseBroker) HandleWithContextAndGzip(ctx context.Context) http.Handler {
+	return b.handleWithContextAndCompression(ctx, "gzip", func(w io.Writer) io.WriteCloser {
+		return gzip.NewWriter(w)
+	})
+}
+
+// HandleWithContext Handles request to a listening Broker
+func (b *SseBroker) handleWithContextAndCompression(ctx context.Context, contentEncoding string, compressFn func(io.Writer) io.WriteCloser) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Content-Type", "text/event-stream")
 		w.Header().Add("Cache-Control", "no-cache")
 		w.Header().Add("Connection", "keep-alive")
+		if contentEncoding != "" && compressFn != nil {
+			w.Header().Add("Content-Encoding", contentEncoding)
+		}
+		w.Header().Add("Transfer-Encoding", "chunked")
 		w.Header().Add("Access-Control-Allow-Origin", r.Header.Get("Origin"))
 		if r.Method == http.MethodOptions {
 			return
@@ -117,11 +133,23 @@ func (b *SseBroker) HandleWithContext(ctx context.Context) http.Handler {
 		for {
 			select {
 			case msg := <-messageChan:
-				_, err := w.Write(msg)
-				if err != nil {
-					log.Println("Error writing data to SSE-Client")
-					return
+				if compressFn != nil {
+					cp := compressFn(w)
+					_, err := cp.Write(msg)
+					if err != nil {
+						log.Println("Error writing data to SSE-Client")
+						cp.Close()
+						return
+					}
+					cp.Close()
+				} else {
+					_, err := w.Write(msg)
+					if err != nil {
+						log.Println("Error writing data to SSE-Client")
+						return
+					}
 				}
+
 				// Flush the data immediatly instead of buffering it for later.
 				flusher.Flush()
 				break
