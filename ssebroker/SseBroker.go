@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 )
 
 // SseBroker ...
@@ -94,17 +95,23 @@ func (b *SseBroker) HandleWithContextAndGzip(ctx context.Context) http.Handler {
 func (b *SseBroker) handleWithContextAndCompression(ctx context.Context, contentEncoding string, compressFn func(io.Writer) io.WriteCloser) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Content-Type", "text/event-stream")
-		w.Header().Add("Cache-Control", "no-cache")
+		w.Header().Add("Cache-Control", "no-cache, no-store, must-revalidate, proxy-revalidate")
 		w.Header().Add("Connection", "keep-alive")
-		if contentEncoding != "" && compressFn != nil {
+		if contentEncoding != "" && compressFn != nil && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 			w.Header().Add("Content-Encoding", contentEncoding)
+		} else {
+			compressFn = nil
 		}
 		w.Header().Add("Transfer-Encoding", "chunked")
 		w.Header().Add("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+		w.Header().Add("Access-Control-Allow-Headers", "*")
 		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
 			return
 		}
 
+		// isLegacy := r.Header.Get("X-Requested-With") == "XMLHttpRequest"
+		isLegacy := strings.Contains(r.Header.Get("User-Agent"), "Edge") || (strings.Contains(r.Header.Get("User-Agent"), "Android") && strings.Contains(r.Header.Get("User-Agent"), "Edge/"))
 		flusher, ok := w.(http.Flusher)
 		if !ok {
 			http.Error(w, "Server-Sent Events not supportet!", http.StatusInternalServerError)
@@ -152,6 +159,9 @@ func (b *SseBroker) handleWithContextAndCompression(ctx context.Context, content
 
 				// Flush the data immediatly instead of buffering it for later.
 				flusher.Flush()
+				if isLegacy {
+					return
+				}
 				break
 			case <-ctx.Done():
 				closeClientConnection()
