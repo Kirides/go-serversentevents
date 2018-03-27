@@ -42,6 +42,12 @@ func (b *SseBroker) SetDebug(v bool) {
 	b.debug = v
 }
 
+func (b *SseBroker) log(format string, args ...interface{}) {
+	if b.debug {
+		log.Printf(format, args)
+	}
+}
+
 // ListenWithContext ...
 func (b *SseBroker) ListenWithContext(ctx context.Context) {
 	for {
@@ -50,15 +56,11 @@ func (b *SseBroker) ListenWithContext(ctx context.Context) {
 			return
 		case c := <-b.onNewClient:
 			b.clients[c] = true
-			if b.debug {
-				log.Printf("New Client for SSE. Total %d\n", len(b.clients))
-			}
+			b.log("New Client for SSE. Total %d\n", len(b.clients))
 			break
 		case c := <-b.onClientClosing:
 			delete(b.clients, c)
-			if b.debug {
-				log.Printf("SSE-Client left. Total %d\n", len(b.clients))
-			}
+			b.log("SSE-Client left. Total %d\n", len(b.clients))
 			break
 		case c := <-b.onMessage:
 			for client := range b.clients {
@@ -153,9 +155,7 @@ func (b *SseBroker) HandleWithContext(ctx context.Context) http.Handler {
 			case msg := <-messageChan:
 				_, err := w.Write(msg)
 				if err != nil {
-					if b.debug {
-						log.Println("Error writing data to SSE-Client")
-					}
+					b.log("Error writing data to SSE-Client")
 					return
 				}
 				// Flush the data immediatly instead of buffering it for later.
