@@ -1,10 +1,8 @@
 package ssebroker
 
 import (
-	"compress/gzip"
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -16,6 +14,7 @@ type SseBroker struct {
 	onMessage       chan []byte
 	onNewClient     chan chan []byte
 	onClientClosing chan chan []byte
+	debug           bool
 }
 
 // NewSseBroker ...
@@ -28,6 +27,11 @@ func NewSseBroker() *SseBroker {
 	}
 }
 
+// SetDebug enables debugging logs
+func (b *SseBroker) SetDebug(v bool) {
+	b.debug = v
+}
+
 // ListenWithContext ...
 func (b *SseBroker) ListenWithContext(ctx context.Context) {
 	for {
@@ -36,11 +40,15 @@ func (b *SseBroker) ListenWithContext(ctx context.Context) {
 			return
 		case c := <-b.onNewClient:
 			b.clients[c] = true
-			log.Printf("New Client for SSE. Total %d\n", len(b.clients))
+			if b.debug {
+				log.Printf("New Client for SSE. Total %d\n", len(b.clients))
+			}
 			break
 		case c := <-b.onClientClosing:
 			delete(b.clients, c)
-			log.Printf("SSE-Client left. Total %d\n", len(b.clients))
+			if b.debug {
+				log.Printf("SSE-Client left. Total %d\n", len(b.clients))
+			}
 			break
 		case c := <-b.onMessage:
 			for client := range b.clients {
@@ -69,29 +77,17 @@ func (b *SseBroker) HandleAndListenWithContext(ctx context.Context) http.Handler
 
 // HandleWithContext Handles request to a listening Broker
 func (b *SseBroker) HandleWithContext(ctx context.Context) http.Handler {
-	return b.handleWithContextAndCompression(ctx, "", nil)
-}
-
-// HandleWithContextAndGzip Handles request to a listening Broker
-func (b *SseBroker) HandleWithContextAndGzip(ctx context.Context) http.Handler {
-	return b.handleWithContextAndCompression(ctx, "gzip", func(w io.Writer) io.WriteCloser {
-		return gzip.NewWriter(w)
-	})
-}
-
-// HandleWithContext Handles request to a listening Broker
-func (b *SseBroker) handleWithContextAndCompression(ctx context.Context, contentEncoding string, compressFn func(io.Writer) io.WriteCloser) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Content-Type", "text/event-stream")
 		w.Header().Add("Cache-Control", "no-cache, no-store, must-revalidate, proxy-revalidate")
 		w.Header().Add("Connection", "keep-alive")
-		if contentEncoding != "" && compressFn != nil && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-			w.Header().Add("Content-Encoding", contentEncoding)
-		} else {
-			compressFn = nil
+
+		origin := r.Header.Get("Origin")
+		if origin == "null" {
+			origin = "*"
 		}
 		w.Header().Add("Transfer-Encoding", "chunked")
-		w.Header().Add("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+		w.Header().Add("Access-Control-Allow-Origin", origin)
 		w.Header().Add("Access-Control-Allow-Headers", "*")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
@@ -113,46 +109,25 @@ func (b *SseBroker) handleWithContextAndCompression(ctx context.Context, content
 		// Listen to connection close and un-register messageChan
 		closeNotify := w.(http.CloseNotifier).CloseNotify()
 
-		go func() {
-			select {
-			case <-closeNotify:
-				closeClientConnection()
-				break
-			case <-ctx.Done():
-				closeClientConnection()
-				return
-			}
-		}()
-
 		// block waiting for messages broadcast on this connection's messageChan
 		for {
 			select {
 			case msg := <-messageChan:
-				if compressFn != nil {
-					cp := compressFn(w)
-					_, err := cp.Write(msg)
-					if err != nil {
+				_, err := w.Write(msg)
+				if err != nil {
+					if b.debug {
 						log.Println("Error writing data to SSE-Client")
-						cp.Close()
-						return
 					}
-					cp.Close()
-				} else {
-					_, err := w.Write(msg)
-					if err != nil {
-						log.Println("Error writing data to SSE-Client")
-						return
-					}
+					return
 				}
-
 				// Flush the data immediatly instead of buffering it for later.
 				flusher.Flush()
 				if isLegacy {
 					return
 				}
 				break
+			case <-closeNotify:
 			case <-ctx.Done():
-				closeClientConnection()
 				return
 			}
 		}
