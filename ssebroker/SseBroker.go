@@ -5,6 +5,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 )
@@ -24,27 +25,20 @@ type SseBroker struct {
 	onMessage       chan []byte
 	onNewClient     chan chan []byte
 	onClientClosing chan chan []byte
-	debug           bool
+	logger          *log.Logger
 }
 
 // NewSseBroker ...
-func NewSseBroker() *SseBroker {
+func NewSseBroker(logger *log.Logger) *SseBroker {
+	if logger == nil {
+		logger = log.New(os.Stdout, "", log.Flags())
+	}
 	return &SseBroker{
 		onMessage:       make(chan []byte, 1),
 		onNewClient:     make(chan chan []byte),
 		onClientClosing: make(chan chan []byte),
 		clients:         make(map[chan []byte]bool),
-	}
-}
-
-// SetDebug enables debugging logs
-func (b *SseBroker) SetDebug(v bool) {
-	b.debug = v
-}
-
-func (b *SseBroker) log(format string, args ...interface{}) {
-	if b.debug {
-		log.Printf(format, args)
+		logger:          logger,
 	}
 }
 
@@ -56,11 +50,11 @@ func (b *SseBroker) ListenWithContext(ctx context.Context) {
 			return
 		case c := <-b.onNewClient:
 			b.clients[c] = true
-			b.log("New Client for SSE. Total %d\n", len(b.clients))
+			b.logger.Printf("New Client for SSE. Total %d\n", len(b.clients))
 			break
 		case c := <-b.onClientClosing:
 			delete(b.clients, c)
-			b.log("SSE-Client left. Total %d\n", len(b.clients))
+			b.logger.Printf("SSE-Client left. Total %d\n", len(b.clients))
 			break
 		case c := <-b.onMessage:
 			for client := range b.clients {
@@ -155,7 +149,7 @@ func (b *SseBroker) HandleWithContext(ctx context.Context) http.Handler {
 			case msg := <-messageChan:
 				_, err := w.Write(msg)
 				if err != nil {
-					b.log("Error writing data to SSE-Client")
+					b.logger.Printf("Error writing data to SSE-Client")
 					return
 				}
 				// Flush the data immediatly instead of buffering it for later.

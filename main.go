@@ -12,8 +12,7 @@ import (
 
 func main() {
 	ctxt := context.Background()
-	sseBroker := ssebroker.NewSseBroker()
-	sseBroker.SetDebug(true)
+	sseBroker := ssebroker.NewSseBroker(nil)
 	http.Handle("/sse-stream", sseBroker.HandleWithContext(ctxt))
 	go sseBroker.ListenWithContext(ctxt)
 	http.HandleFunc("/", indexHandler)
