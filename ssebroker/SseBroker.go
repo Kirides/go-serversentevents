@@ -87,7 +87,9 @@ func (b *SseBroker) HandleWithContext(ctx context.Context) http.Handler {
 			origin = "*"
 		}
 		w.Header().Add("Transfer-Encoding", "chunked")
-		w.Header().Add("Access-Control-Allow-Origin", origin)
+		if origin != "" {
+			w.Header().Add("Access-Control-Allow-Origin", origin)
+		}
 		w.Header().Add("Access-Control-Allow-Headers", "*")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
@@ -95,7 +97,7 @@ func (b *SseBroker) HandleWithContext(ctx context.Context) http.Handler {
 		}
 
 		// isLegacy := r.Header.Get("X-Requested-With") == "XMLHttpRequest"
-		isLegacy := strings.Contains(r.Header.Get("User-Agent"), "Edge") || (strings.Contains(r.Header.Get("User-Agent"), "Android") && strings.Contains(r.Header.Get("User-Agent"), "Edge/"))
+		isLegacy := strings.Contains(r.Header.Get("User-Agent"), "Edge")
 		flusher, ok := w.(http.Flusher)
 		if !ok {
 			http.Error(w, "Server-Sent Events not supportet!", http.StatusInternalServerError)
