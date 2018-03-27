@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -21,7 +20,7 @@ func main() {
 	go func() {
 		for {
 			time.Sleep(1 * time.Second)
-			data := fmt.Sprintf("Current Time: %s", time.Now().Format("2006-01-02T15:04:05.999-07:00"))
+			data := time.Now().Format("2006-01-02T15:04:05.999-07:00")
 			sseBroker.SendEvent("1", "currentTime", []byte(data))
 		}
 	}()
@@ -62,7 +61,7 @@ var htmlTemplate = `<!DOCTYPE html>
             };
         };
         eventSource.addEventListener("currentTime", function (timeEvent) {
-            lblCurrentTime.innerText = timeEvent.data;
+            lblCurrentTime.innerText = "Current Time: " + timeEvent.data;
         })
     </script>
 </body>

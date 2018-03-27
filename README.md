@@ -1,5 +1,5 @@
 # go-serversentevents
-Sample application that shows usage of ServerSentEvents and supporting gzip-compression.
+Sample application that shows usage of ServerSentEvents.
 
 ## Basic Usage
 ```golang
@@ -9,7 +9,7 @@ http.HandleFunc("/", indexHandler)
 go func() {
     for {
         time.Sleep(1 * time.Second)
-        data := fmt.Sprintf("Current Time: %s", time.Now().Format("2006-01-02T15:04:05.999-07:00"))
+        data := time.Now().Format("2006-01-02T15:04:05.999-07:00")
         sseBroker.SendEvent("1", "currentTime", []byte(data))
     }
 }()
@@ -21,7 +21,7 @@ log.Fatal(http.ListenAndServe("127.0.0.1:5000", nil))
 ctxt := context.Background()
 
 sseBroker := ssebroker.NewSseBroker()
-http.Handle("/sse-stream", sseBroker.HandleWithContextAndGzip(ctxt))
+http.Handle("/sse-stream", sseBroker.HandleWithContext(ctxt))
 go sseBroker.ListenWithContext(ctxt)
 http.HandleFunc("/", indexHandler)
 go func() {
@@ -43,7 +43,7 @@ log.Fatal(http.ListenAndServe("127.0.0.1:5000", nil))
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Document</title>
+    <title>SSE Testpage</title>
 </head>
 
 <body>
@@ -51,19 +51,25 @@ log.Fatal(http.ListenAndServe("127.0.0.1:5000", nil))
     <label id=currentTime></label>
     <ul id=messages />
     <script>
-        var messages = document.getElementById("messages");
-        var closeStream = document.getElementById("btn_close");
-        var lblCurrentTime = document.getElementById("currentTime");
+        if (window.EventSource !== undefined) {
+            initSSE();
+        }
 
-        var eventSource = new EventSource("http://127.0.0.1:5000/sse-stream");
-        eventSource.onopen = function (x) {
-            closeStream.onclick = function (x) {
-                eventSource.close();
+        function initSSE() {
+            var messages = document.getElementById("messages");
+            var closeStream = document.getElementById("btn_close");
+            var lblCurrentTime = document.getElementById("currentTime");
+
+            var eventSource = new EventSource("http://127.0.0.1:5000/sse-stream");
+            eventSource.onopen = function (x) {
+                closeStream.onclick = function (x) {
+                    eventSource.close();
+                };
             };
-        };
-        eventSource.addEventListener("currentTime", function (timeEvent) {
-            lblCurrentTime.innerText = timeEvent.data;
-        })
+            eventSource.addEventListener("currentTime", function (timeEvent) {
+                lblCurrentTime.innerText = timeEvent.data;
+            })
+        }
     </script>
 </body>
 
