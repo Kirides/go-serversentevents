@@ -3,7 +3,7 @@ Sample application that shows usage of ServerSentEvents.
 
 ## Basic Usage
 ```golang
-sseBroker := ssebroker.NewSseBroker()
+sseBroker := ssebroker.NewSseBroker(nil) // Uses default logger (*log.Logger)
 http.Handle("/sse-stream", sseBroker.HandleAndListenWithContext(context.Background()))
 http.HandleFunc("/", indexHandler)
 go func() {
