@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"kirides.com/sseTest/ssebroker"
+	"github.com/Kirides/go-serversentevents/ssebroker"
 )
 
 func main() {

@@ -33,7 +33,7 @@ func (b *SseBroker) ListenWithContext(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			break
+			return
 		case c := <-b.onNewClient:
 			b.clients[c] = true
 			log.Printf("New Client for SSE. Total %d\n", len(b.clients))
@@ -65,18 +65,6 @@ func (b SseBroker) SendMessage(eventID string, eventName string, value []byte) {
 func (b *SseBroker) HandleAndListenWithContext(ctx context.Context) http.Handler {
 	go b.ListenWithContext(ctx)
 	return b.HandleWithContext(ctx)
-}
-
-// HandleAndListen ...
-func (b *SseBroker) HandleAndListen() http.Handler {
-	ctx := context.Background()
-	go b.ListenWithContext(ctx)
-	return b.HandleWithContext(ctx)
-}
-
-// Handle ...
-func (b *SseBroker) Handle() http.Handler {
-	return b.HandleWithContext(context.Background())
 }
 
 // HandleWithContext Handles request to a listening Broker
