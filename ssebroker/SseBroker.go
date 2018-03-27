@@ -1,11 +1,21 @@
 package ssebroker
 
 import (
+	"bytes"
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"sync"
+)
+
+var (
+	buf          = new(bytes.Buffer)
+	mtx          sync.Mutex
+	idBytes      = []byte("id: ")
+	eventBytes   = []byte("event: ")
+	dataBytes    = []byte("data: ")
+	newLineBytes = []byte("\n")
 )
 
 // SseBroker ...
@@ -61,12 +71,38 @@ func (b *SseBroker) ListenWithContext(ctx context.Context) {
 
 // SendEvent ...
 func (b SseBroker) SendEvent(eventID, eventName, value string) {
-	b.onMessage <- []byte(fmt.Sprintf("id: %s\nevent: %s\ndata: %s\n\n", eventID, eventName, value))
+	mtx.Lock()
+	buf.Reset()
+	defer mtx.Unlock()
+
+	buf.Write(idBytes)
+	buf.WriteString(eventID)
+	buf.Write(newLineBytes)
+
+	buf.Write(eventBytes)
+	buf.WriteString(eventName)
+	buf.Write(newLineBytes)
+
+	buf.Write(dataBytes)
+	buf.WriteString(value)
+	buf.Write(newLineBytes)
+	buf.Write(newLineBytes)
+
+	b.onMessage <- buf.Bytes()
 }
 
 // SendMessage ...
 func (b SseBroker) SendMessage(value string) {
-	b.onMessage <- []byte("data: " + value + "\n\n")
+	mtx.Lock()
+	buf.Reset()
+	defer mtx.Unlock()
+
+	buf.Write(dataBytes)
+	buf.WriteString(value)
+	buf.Write(newLineBytes)
+	buf.Write(newLineBytes)
+
+	b.onMessage <- buf.Bytes()
 }
 
 // HandleAndListenWithContext Starts a SSE-Broker and handles requests to the bound path
