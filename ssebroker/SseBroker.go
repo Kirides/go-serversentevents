@@ -60,13 +60,13 @@ func (b *SseBroker) ListenWithContext(ctx context.Context) {
 }
 
 // SendEvent ...
-func (b SseBroker) SendEvent(eventID string, eventName string, value []byte) {
+func (b SseBroker) SendEvent(eventID, eventName, value string) {
 	b.onMessage <- []byte(fmt.Sprintf("id: %s\nevent: %s\ndata: %s\n\n", eventID, eventName, value))
 }
 
 // SendMessage ...
-func (b SseBroker) SendMessage(eventID string, eventName string, value []byte) {
-	b.onMessage <- []byte(fmt.Sprintf("data: %s\n\n", value))
+func (b SseBroker) SendMessage(value string) {
+	b.onMessage <- []byte("data: " + value + "\n\n")
 }
 
 // HandleAndListenWithContext Starts a SSE-Broker and handles requests to the bound path

@@ -21,7 +21,7 @@ func main() {
 		for {
 			time.Sleep(1 * time.Second)
 			data := time.Now().Format("2006-01-02T15:04:05.999-07:00")
-			sseBroker.SendEvent("1", "currentTime", []byte(data))
+			sseBroker.SendEvent("1", "currentTime", data)
 		}
 	}()
 	log.Fatal(http.ListenAndServe("127.0.0.1:5000", nil))
