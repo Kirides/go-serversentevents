@@ -11,8 +11,6 @@ import (
 )
 
 var (
-	buf          = new(bytes.Buffer)
-	mtx          sync.Mutex
 	idBytes      = []byte("id: ")
 	eventBytes   = []byte("event: ")
 	dataBytes    = []byte("data: ")
@@ -26,6 +24,8 @@ type SseBroker struct {
 	onNewClient     chan chan []byte
 	onClientClosing chan chan []byte
 	logger          *log.Logger
+	buf             *bytes.Buffer
+	mtx             *sync.Mutex
 }
 
 // NewSseBroker ...
@@ -39,6 +39,8 @@ func NewSseBroker(logger *log.Logger) *SseBroker {
 		onClientClosing: make(chan chan []byte),
 		clients:         make(map[chan []byte]bool),
 		logger:          logger,
+		buf:             new(bytes.Buffer),
+		mtx:             new(sync.Mutex),
 	}
 }
 
@@ -66,39 +68,36 @@ func (b *SseBroker) ListenWithContext(ctx context.Context) {
 }
 
 // SendEvent ...
-func (b SseBroker) SendEvent(eventID, eventName, value string) {
-	mtx.Lock()
-	buf.Reset()
-	defer mtx.Unlock()
+func (b *SseBroker) SendEvent(eventID, eventName, value string) {
+	b.mtx.Lock()
+	b.buf.Reset()
 
-	buf.Write(idBytes)
-	buf.WriteString(eventID)
-	buf.Write(newLineBytes)
+	b.writeBuffer(idBytes, eventID)
+	b.writeBuffer(eventBytes, eventName)
+	b.writeBuffer(dataBytes, value)
 
-	buf.Write(eventBytes)
-	buf.WriteString(eventName)
-	buf.Write(newLineBytes)
+	b.buf.Write(newLineBytes)
 
-	buf.Write(dataBytes)
-	buf.WriteString(value)
-	buf.Write(newLineBytes)
-	buf.Write(newLineBytes)
-
-	b.onMessage <- buf.Bytes()
+	b.onMessage <- b.buf.Bytes()
+	b.mtx.Unlock()
 }
 
 // SendMessage ...
-func (b SseBroker) SendMessage(value string) {
-	mtx.Lock()
-	buf.Reset()
-	defer mtx.Unlock()
+func (b *SseBroker) SendMessage(value string) {
+	b.mtx.Lock()
+	b.buf.Reset()
 
-	buf.Write(dataBytes)
-	buf.WriteString(value)
-	buf.Write(newLineBytes)
-	buf.Write(newLineBytes)
+	b.writeBuffer(dataBytes, value)
+	b.buf.Write(newLineBytes)
 
-	b.onMessage <- buf.Bytes()
+	b.onMessage <- b.buf.Bytes()
+	b.mtx.Unlock()
+}
+
+func (b *SseBroker) writeBuffer(key []byte, value string) {
+	b.buf.Write(key)
+	b.buf.WriteString(value)
+	b.buf.Write(newLineBytes)
 }
 
 // HandleAndListenWithContext Starts a SSE-Broker and handles requests to the bound path

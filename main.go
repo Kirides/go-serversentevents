@@ -5,17 +5,28 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"time"
 
 	"github.com/Kirides/go-serversentevents/ssebroker"
 )
 
+var srv = &http.Server{
+	IdleTimeout:  60 * time.Second,
+	ReadTimeout:  15 * time.Second,
+	WriteTimeout: 15 * time.Second,
+	Addr:         "127.0.0.1:5000",
+}
+
 func main() {
-	ctxt := context.Background()
+	ctxt, cancel := context.WithCancel(context.Background())
 	sseBroker := ssebroker.NewSseBroker(nil)
-	http.Handle("/sse-stream", sseBroker.HandleWithContext(ctxt))
-	go sseBroker.ListenWithContext(ctxt)
-	http.HandleFunc("/", indexHandler)
+	mux := http.NewServeMux()
+	srv.Handler = mux
+
+	mux.Handle("/sse-stream", sseBroker.HandleAndListenWithContext(ctxt))
+	mux.HandleFunc("/", indexHandler)
 	go func() {
 		for {
 			time.Sleep(1 * time.Second)
@@ -23,8 +34,20 @@ func main() {
 			sseBroker.SendEvent("1", "currentTime", data)
 		}
 	}()
-	log.Fatal(http.ListenAndServe("127.0.0.1:5000", nil))
-	ctxt.Done()
+	go func() {
+		log.Printf("Server running on %s", srv.Addr)
+		log.Println(srv.ListenAndServe())
+	}()
+	handleShutdown(ctxt, cancel)
+}
+
+func handleShutdown(ctx context.Context, cancel context.CancelFunc) {
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
+	<-sig
+	log.Println("Received interrupt. Shutting down server.")
+	cancel()
+	srv.Shutdown(ctx)
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
