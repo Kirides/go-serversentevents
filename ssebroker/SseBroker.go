@@ -109,6 +109,10 @@ func (b *SseBroker) HandleAndListenWithContext(ctx context.Context) http.Handler
 // HandleWithContext Handles request to a listening Broker
 func (b *SseBroker) HandleWithContext(ctx context.Context) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
 		w.Header().Add("Content-Type", "text/event-stream")
 		w.Header().Add("Cache-Control", "no-cache, no-store, must-revalidate, proxy-revalidate")
 		w.Header().Add("Connection", "keep-alive")
@@ -126,12 +130,12 @@ func (b *SseBroker) HandleWithContext(ctx context.Context) http.Handler {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-
 		// isLegacy := r.Header.Get("X-Requested-With") == "XMLHttpRequest"
 		isLegacy := strings.Contains(r.Header.Get("User-Agent"), "Edge")
+		closeNotify := w.(http.CloseNotifier).CloseNotify()
 		flusher, ok := w.(http.Flusher)
-		if !ok {
-			http.Error(w, "Server-Sent Events not supportet!", http.StatusInternalServerError)
+		if !ok && !isLegacy {
+			http.Error(w, "Server-Sent Events not supported!", http.StatusInternalServerError)
 			return
 		}
 		messageChan := make(chan []byte)
@@ -140,7 +144,6 @@ func (b *SseBroker) HandleWithContext(ctx context.Context) http.Handler {
 		defer closeClientConnection()
 
 		// Listen to connection close and un-register messageChan
-		closeNotify := w.(http.CloseNotifier).CloseNotify()
 
 		// block waiting for messages broadcast on this connection's messageChan
 		for {
@@ -152,10 +155,10 @@ func (b *SseBroker) HandleWithContext(ctx context.Context) http.Handler {
 					return
 				}
 				// Flush the data immediatly instead of buffering it for later.
-				flusher.Flush()
 				if isLegacy {
 					return
 				}
+				flusher.Flush()
 				break
 			case <-closeNotify:
 			case <-ctx.Done():

@@ -13,10 +13,9 @@ import (
 )
 
 var srv = &http.Server{
-	IdleTimeout:  60 * time.Second,
-	ReadTimeout:  15 * time.Second,
-	WriteTimeout: 15 * time.Second,
-	Addr:         "127.0.0.1:5000",
+	IdleTimeout:       60 * time.Second,
+	ReadHeaderTimeout: 15 * time.Second,
+	Addr:              "127.0.0.1:5000",
 }
 
 func main() {
@@ -26,7 +25,7 @@ func main() {
 	srv.Handler = mux
 
 	mux.Handle("/sse-stream", sseBroker.HandleAndListenWithContext(ctxt))
-	mux.HandleFunc("/", indexHandler)
+	mux.Handle("/", http.TimeoutHandler(indexHandler(), time.Second*10, ""))
 	go func() {
 		for {
 			time.Sleep(1 * time.Second)
@@ -50,11 +49,17 @@ func handleShutdown(ctx context.Context, cancel context.CancelFunc) {
 	srv.Shutdown(ctx)
 }
 
-func indexHandler(w http.ResponseWriter, r *http.Request) {
-	indexTemplate := template.New("index")
-	index := template.Must(indexTemplate.Parse(htmlTemplate))
-	w.Header().Add("Content-Type", "text/html")
-	index.Execute(w, nil)
+func indexHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		indexTemplate := template.New("index")
+		index := template.Must(indexTemplate.Parse(htmlTemplate))
+		w.Header().Add("Content-Type", "text/html")
+		index.Execute(w, nil)
+	})
 }
 
 var htmlTemplate = `<!DOCTYPE html>
@@ -72,19 +77,25 @@ var htmlTemplate = `<!DOCTYPE html>
     <label id=currentTime />
     <ul id=messages />
     <script>
-        var messages = document.getElementById("messages");
-        var closeStream = document.getElementById("btn_close");
-        var lblCurrentTime = document.getElementById("currentTime");
+        if (window.EventSource !== undefined) {
+            initSSE();
+        }
 
-        var eventSource = new EventSource("http://127.0.0.1:5000/sse-stream");
-        eventSource.onopen = function (x) {
-            closeStream.onclick = function (x) {
-                eventSource.close();
+        function initSSE() {
+            var messages = document.getElementById("messages");
+            var closeStream = document.getElementById("btn_close");
+            var lblCurrentTime = document.getElementById("currentTime");
+
+            var eventSource = new EventSource("/sse-stream");
+            eventSource.onopen = function (x) {
+                closeStream.onclick = function (x) {
+                    eventSource.close();
+                };
             };
-        };
-        eventSource.addEventListener("currentTime", function (timeEvent) {
-            lblCurrentTime.innerText = "Current Time: " + timeEvent.data;
-        })
+            eventSource.addEventListener("currentTime", function (timeEvent) {
+                lblCurrentTime.innerText = "Current Time: " + timeEvent.data;
+            })
+        }
     </script>
 </body>
 
