@@ -134,12 +134,12 @@ func (b *SseBroker) HandleWithContext(ctx context.Context) http.Handler {
 		isLegacy := strings.Contains(r.Header.Get("User-Agent"), "Edge")
 		closeNotify, ok := w.(http.CloseNotifier)
 		if !ok {
-			http.Error(w, "Server-Sent Events not supported!", http.StatusInternalServerError)
+			http.Error(w, "Server-Sent Events not supported!", http.StatusBadRequest)
 			return
 		}
 		flusher, ok := w.(http.Flusher)
 		if !ok && !isLegacy {
-			http.Error(w, "Server-Sent Events not supported!", http.StatusInternalServerError)
+			http.Error(w, "Server-Sent Events not supported!", http.StatusBadRequest)
 			return
 		}
 		messageChan := make(chan []byte)
