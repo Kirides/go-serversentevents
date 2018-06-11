@@ -132,7 +132,11 @@ func (b *SseBroker) HandleWithContext(ctx context.Context) http.Handler {
 		}
 		// isLegacy := r.Header.Get("X-Requested-With") == "XMLHttpRequest"
 		isLegacy := strings.Contains(r.Header.Get("User-Agent"), "Edge")
-		closeNotify := w.(http.CloseNotifier).CloseNotify()
+		closeNotify, ok := w.(http.CloseNotifier)
+		if !ok {
+			http.Error(w, "Server-Sent Events not supported!", http.StatusInternalServerError)
+			return
+		}
 		flusher, ok := w.(http.Flusher)
 		if !ok && !isLegacy {
 			http.Error(w, "Server-Sent Events not supported!", http.StatusInternalServerError)
@@ -160,7 +164,8 @@ func (b *SseBroker) HandleWithContext(ctx context.Context) http.Handler {
 				}
 				flusher.Flush()
 				break
-			case <-closeNotify:
+			case <-closeNotify.CloseNotify():
+				return
 			case <-ctx.Done():
 				return
 			}
