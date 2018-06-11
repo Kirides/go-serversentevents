@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+</head>
+
+<body>
+    <button id=btn_close>close Stream</button>
+    <label id=currentTime />
+    <ul id=messages />
+    <script>
+        if (window.EventSource !== undefined) {
+            initSSE();
+        }
+
+        function initSSE() {
+            var messages = document.getElementById("messages");
+            var closeStream = document.getElementById("btn_close");
+            var lblCurrentTime = document.getElementById("currentTime");
+
+            var eventSource = new EventSource("/sse-stream");
+            eventSource.onopen = function (x) {
+                closeStream.onclick = function (x) {
+                    eventSource.close();
+                };
+            };
+            eventSource.addEventListener("currentTime", function (timeEvent) {
+                lblCurrentTime.innerText = "Current Time: " + timeEvent.data;
+            })
+        }
+    </script>
+</body>
+
+</html>

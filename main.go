@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"html/template"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"time"
 
 	"github.com/Kirides/go-serversentevents/ssebroker"
@@ -17,8 +17,15 @@ var srv = &http.Server{
 	ReadHeaderTimeout: 15 * time.Second,
 	Addr:              "127.0.0.1:5000",
 }
+var exePath string
 
 func main() {
+	wd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	exePath = wd
+
 	ctxt, cancel := context.WithCancel(context.Background())
 	sseBroker := ssebroker.NewSseBroker(nil)
 	mux := http.NewServeMux()
@@ -50,53 +57,12 @@ func handleShutdown(ctx context.Context, cancel context.CancelFunc) {
 }
 
 func indexHandler() http.Handler {
+	indexPath := filepath.Join(exePath, "index.html")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		indexTemplate := template.New("index")
-		index := template.Must(indexTemplate.Parse(htmlTemplate))
-		w.Header().Add("Content-Type", "text/html")
-		index.Execute(w, nil)
+		http.ServeFile(w, r, indexPath)
 	})
 }
-
-var htmlTemplate = `<!DOCTYPE html>
-<html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Document</title>
-</head>
-
-<body>
-    <button id=btn_close>close Stream</button>
-    <label id=currentTime />
-    <ul id=messages />
-    <script>
-        if (window.EventSource !== undefined) {
-            initSSE();
-        }
-
-        function initSSE() {
-            var messages = document.getElementById("messages");
-            var closeStream = document.getElementById("btn_close");
-            var lblCurrentTime = document.getElementById("currentTime");
-
-            var eventSource = new EventSource("/sse-stream");
-            eventSource.onopen = function (x) {
-                closeStream.onclick = function (x) {
-                    eventSource.close();
-                };
-            };
-            eventSource.addEventListener("currentTime", function (timeEvent) {
-                lblCurrentTime.innerText = "Current Time: " + timeEvent.data;
-            })
-        }
-    </script>
-</body>
-
-</html>`
